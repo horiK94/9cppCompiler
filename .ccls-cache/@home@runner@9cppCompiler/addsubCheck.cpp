@@ -13,29 +13,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  char *p = argv[1];
-
   cout << ".intel_syntax noprefix\n";
   cout << ".globl main\n";
   cout << "main:\n";
-  cout << "  mov rax, " << strtoll(p, &p, 10) << '\n';
-
-  while (*p) {
-    if (*p == '+') {
-      p++;
-      cout << "  add rax, " << strtoll(p, &p, 10) << "\n";
-      continue;
-    }
-    if (*p == '-') {
-      p++;
-      cout << "  sub rax, " << strtoll(p, &p, 10) << "\n";
-      continue;
-    }
-
-    cout << "予期しない文字: " << *p;
-    return 1;
-  }
-
+  cout << "  mov rax, " << atoi(argv[1]) << '\n';
   cout << "  ret\n";
   return 0;
 }
