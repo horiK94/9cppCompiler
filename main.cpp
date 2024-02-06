@@ -81,6 +81,37 @@ Token *new_token(TokenKind kind, Token *cur, char *str) {
   return tok;
 }
 
+Token *tokenlize(char *p) {
+  Token head;
+  head.next = NULL;
+  Token *cur = &head;
+
+  while (*p) {
+    if (isspace(*p)) { //引数のint型が空白か？
+      p++;
+      continue;
+    }
+
+    if (*p == '+' || *p == '-') {
+      cur = new_token(TK_RESERVED, cur, p);
+      p++;
+      continue;
+    }
+
+    if (isdigit(*p)) {
+      cur = new_token(TK_NUM, cur, p);
+      // strtol(): 文字列を数値に変換する. 文字数に応じてpを進めるs
+      cur->val = strtol(p, &p, 10);
+      continue;
+    }
+
+    error("トークナイズできません");
+  }
+
+  new_token(TK_EOF, cur, p); // 1つ目のTokenは空のTokenなのでnextのものを返す
+  return head.next;
+}
+
 //コマンドの第一引数に直接コードを渡す仕組み
 // argc: 引数の個数
 // argv; 引数の配列 ex. $ ./a.out 100 abc →　"./a.out","100","abc"
@@ -90,27 +121,22 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  char *p = argv[1];
+  token = tokenlize(argv[1]);
 
   cout << ".intel_syntax noprefix\n";
   cout << ".globl main\n";
   cout << "main:\n";
-  cout << "  mov rax, " << strtoll(p, &p, 10) << '\n';
 
-  while (*p) {
-    if (*p == '+') {
-      p++;
-      cout << "  add rax, " << strtoll(p, &p, 10) << "\n";
+  //式の最初は数の必要があるのでそれをチェックしたうえでmov命令を出力
+  cout << "  mov rax, " << except_number() << '\n';
+
+  while (!at_eof()) {
+    if (consume('+')) {
+      cout << "  add rax, " << except_number() << '\n';
       continue;
     }
-    if (*p == '-') {
-      p++;
-      cout << "  sub rax, " << strtoll(p, &p, 10) << "\n";
-      continue;
-    }
-
-    cout << "予期しない文字: " << *p;
-    return 1;
+    except('-');
+    cout << "  sub rax, " << except_number() << '\n';
   }
 
   cout << "  ret\n";
