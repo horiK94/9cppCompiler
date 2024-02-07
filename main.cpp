@@ -23,16 +23,22 @@ struct Token {
   char *str;      // kindがTK_RESERVEDの場合、その文字列
 };
 
-Token *token; //現在着目しているトークン
+Token *token;     //現在着目しているトークン
+char *user_input; //入力
 
-void error(char *fmt, ...) {
+void error_at(char *loc, char *fmt, ...) {
   va_list ap;        //可変長引数
   va_start(ap, fmt); //可変長引数の初期化. ap: 引数リスト,
                      // fmp:指定した引数以降を引数リストに格納
+
+  int pos = loc - user_input;
+  fprintf(stderr, "%s\n", user_input);
+  fprintf(stderr, "%*s", pos, ""); //*で数で表示する文字数を定義できると
+  fprintf(stderr, "^ ");
   // vfprintf(resource $stream, string $format, array $values): int
   // stream: 出力先, format: 変換書式文字列, values: 出力する変数群
   vfprintf(stderr, fmt, ap);
-  cout << '\n';
+  fprintf(stderr, "\n");
   exit(1); //プログラムの終了
 }
 
@@ -50,7 +56,7 @@ bool consume(char op) {
 //それ以外はエラーを報告する
 void except(char op) {
   if (token->kind != TK_RESERVED || token->str[0] != op) {
-    error("'%c'ではありません", op);
+    error_at(token->str, "'%c'ではありません", op);
   }
   token = token->next;
 }
@@ -59,7 +65,7 @@ void except(char op) {
 //それ以外はエラーを報告する
 int except_number() {
   if (token->kind != TK_NUM) {
-    error("数ではありません");
+    error_at(token->str, "数ではありません");
   }
 
   int val = token->val;
@@ -81,11 +87,12 @@ Token *new_token(TokenKind kind, Token *cur, char *str) {
   return tok;
 }
 
-Token *tokenlize(char *p) {
+Token *tokenlize() {
   Token head;
   head.next = NULL;
   Token *cur = &head;
 
+  char *p = user_input;
   while (*p) {
     if (isspace(*p)) { //引数のint型が空白か？
       p++;
@@ -105,7 +112,7 @@ Token *tokenlize(char *p) {
       continue;
     }
 
-    error("トークナイズできません");
+    error_at(p, "トークナイズできません");
   }
 
   new_token(TK_EOF, cur, p); // 1つ目のTokenは空のTokenなのでnextのものを返す
@@ -121,7 +128,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  token = tokenlize(argv[1]);
+  user_input = argv[1];
+  token = tokenlize();
 
   cout << ".intel_syntax noprefix\n";
   cout << ".globl main\n";
