@@ -166,15 +166,27 @@ Node *primary() {
   return new_node_num(expect_number());
 }
 
-// mul = primary ("*" primary | "/" primary)*
+// unary = ("+" | "-")? primary
+Node *unary() {
+  if (consume('+')) {
+    return primary();
+  } else if (consume('-')) {
+    // primaryに対して、0-primaryに置き換える
+    return new_node(ND_SUB, new_node_num(0), primary());
+  } else {
+    return primary();
+  }
+}
+
+// mul = unary ("*" unary | "/" unary)*
 Node *mul() {
-  Node *node = primary();
+  Node *node = unary();
 
   for (;;) {
     if (consume('*')) {
-      node = new_node(ND_MUL, node, primary());
+      node = new_node(ND_MUL, node, unary());
     } else if (consume('/')) {
-      node = new_node(ND_DIV, node, primary());
+      node = new_node(ND_DIV, node, unary());
     } else {
       return node;
     }
