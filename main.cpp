@@ -54,7 +54,7 @@ bool consume(char op) {
 
 //次のトークンが期待している記号の時はトークンを読み進める
 //それ以外はエラーを報告する
-void except(char op) {
+void expect(char op) {
   if (token->kind != TK_RESERVED || token->str[0] != op) {
     error_at(token->str, "'%c'ではありません", op);
   }
@@ -63,7 +63,7 @@ void except(char op) {
 
 //次のトークンが数値の時はトークンを読み進める
 //それ以外はエラーを報告する
-int except_number() {
+int expect_number() {
   if (token->kind != TK_NUM) {
     error_at(token->str, "数ではありません");
   }
@@ -87,19 +87,19 @@ Token *new_token(TokenKind kind, Token *cur, char *str) {
   return tok;
 }
 
-Token *tokenlize() {
+Token *tokenlize(char *input) {
   Token head;
   head.next = NULL;
   Token *cur = &head;
 
-  char *p = user_input;
+  char *p = input;
   while (*p) {
     if (isspace(*p)) { //引数のint型が空白か？
       p++;
       continue;
     }
 
-    if (*p == '+' || *p == '-') {
+    if (string("+-*/()").find(*p) != std::string::npos) {
       cur = new_token(TK_RESERVED, cur, p);
       p++;
       continue;
@@ -107,7 +107,7 @@ Token *tokenlize() {
 
     if (isdigit(*p)) {
       cur = new_token(TK_NUM, cur, p);
-      // strtol(): 文字列を数値に変換する. 文字数に応じてpを進めるs
+      // strtol(): 文字列を数値に変換する. 文字数に応じてpを進める
       cur->val = strtol(p, &p, 10);
       continue;
     }
@@ -117,6 +117,119 @@ Token *tokenlize() {
 
   new_token(TK_EOF, cur, p); // 1つ目のTokenは空のTokenなのでnextのものを返す
   return head.next;
+}
+
+typedef enum {
+  ND_ADD, // +
+  ND_SUB, // -
+  ND_MUL, // *
+  ND_DIV, // /
+  ND_NUM, // 整数
+} NodeKind;
+
+typedef struct Node node;
+
+struct Node {
+  NodeKind kind; //ノードの型
+  Node *lhs;     //左辺
+  Node *rhs;     //右辺
+  int val;       // kindがND_NUMの時使用
+};
+
+Node *new_node(NodeKind kind, Node *lhs, Node *rhs) {
+  Node *node = (Node *)calloc(1, sizeof(Node));
+  node->kind = kind;
+  node->lhs = lhs;
+  node->rhs = rhs;
+  return node;
+}
+
+Node *new_node_num(int val) {
+  Node *node = (Node *)calloc(1, sizeof(Node));
+  node->kind = ND_NUM;
+  node->val = val;
+  return node;
+}
+
+Node *expr();
+
+// primary = "(" expr ")" | num
+Node *primary() {
+  if (consume('(')) {
+    //次のトークンが'('なら、'('expr')'となるはず
+    Node *node = expr();
+    expect(')');
+    return node;
+  }
+
+  //()が無ければ数字があるはず
+  return new_node_num(expect_number());
+}
+
+// mul = primary ("*" primary | "/" primary)*
+Node *mul() {
+  Node *node = primary();
+
+  for (;;) {
+    if (consume('*')) {
+      node = new_node(ND_MUL, node, primary());
+    } else if (consume('/')) {
+      node = new_node(ND_DIV, node, primary());
+    } else {
+      return node;
+    }
+  }
+}
+
+// expr = mul ("+" mul | "-" mul)*
+Node *expr() {
+  Node *node = mul();
+
+  for (;;) {
+    if (consume('+')) {
+      node = new_node(ND_ADD, node, mul());
+    } else if (consume('-')) {
+      node = new_node(ND_SUB, node, mul());
+    } else {
+      return node;
+    }
+  }
+}
+
+void gen(Node *node) {
+  if (node->kind == ND_NUM) {
+    cout << "  push " << node->val << '\n';
+    return;
+  }
+
+  //左辺と右辺があるタイプの時
+  gen(node->lhs);
+  gen(node->rhs);
+
+  cout << "  pop rdi\n"; //右辺(node->rhs)をrdiにpop
+  cout << "  pop rax\n"; //左辺(node->lhs)をraxにpop
+
+  switch (node->kind) {
+  case ND_ADD:
+    cout << "  add rax, rdi\n";
+    break;
+  case ND_SUB:
+    cout << "  sub rax, rdi\n";
+    break;
+  case ND_MUL:
+    cout << "  imul rax, rdi\n";
+    break;
+  case ND_DIV:
+    cout << "  cqo\n"; // rax の値を 128bit integer に拡張し, rax, rdx(符号拡張)
+                       // レジスタへ格納
+    cout
+        << "  idiv rdi\n"; // dx, rax
+                           // を合わせた値を第1オペランド(左の書き方だとrdi)のレジスタの
+                           // 64bit 値で割る. 商を rax, 余りを rdxレジスタに格納
+    break;
+  }
+
+  cout << "  push rax\n"; //結果(=rax)をpushする
 }
 
 //コマンドの第一引数に直接コードを渡す仕組み
@@ -129,24 +242,18 @@ int main(int argc, char **argv) {
   }
 
   user_input = argv[1];
-  token = tokenlize();
+  token = tokenlize(user_input);
+  Node *node = expr();
 
   cout << ".intel_syntax noprefix\n";
   cout << ".globl main\n";
   cout << "main:\n";
 
-  //式の最初は数の必要があるのでそれをチェックしたうえでmov命令を出力
-  cout << "  mov rax, " << except_number() << '\n';
+  //抽象構文木を下りながらコード生成
+  gen(node);
 
-  while (!at_eof()) {
-    if (consume('+')) {
-      cout << "  add rax, " << except_number() << '\n';
-      continue;
-    }
-    except('-');
-    cout << "  sub rax, " << except_number() << '\n';
-  }
-
+  //スタックトップに結果がpushされているので、raxにロード(=pop)する
+  cout << "  pop rax\n";
   cout << "  ret\n";
   return 0;
 }
