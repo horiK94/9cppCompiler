@@ -21,6 +21,7 @@ struct Token {
   Token *next;    //次の入力トークン
   int val;        // kindがTK_NUMの場合、その数値
   char *str;      // kindがTK_RESERVEDの場合、その文字列
+  int len; //トークンの長さ(比較演算子は2文字以上もあり得るため)
 };
 
 Token *token;     //現在着目しているトークン
@@ -44,19 +45,23 @@ void error_at(char *loc, char *fmt, ...) {
 
 //次のトークンが期待している記号の時はトークンを読み進め、trueを返す
 //それ以外はfalseを返す
-bool consume(char op) {
-  if (token->kind != TK_RESERVED || token->str[0] != op) {
+bool consume(char *op) {
+  if (token->kind != TK_RESERVED || strlen(op) != token->len ||
+      memcmp(token->str, op,
+             token->len)) { // token->strとopをtoken->len文字だけ比較
     return false;
   }
+
   token = token->next;
   return true;
 }
 
 //次のトークンが期待している記号の時はトークンを読み進める
 //それ以外はエラーを報告する
-void expect(char op) {
-  if (token->kind != TK_RESERVED || token->str[0] != op) {
-    error_at(token->str, "'%c'ではありません", op);
+void expect(char *op) {
+  if (token->kind != TK_RESERVED || strlen(op) != token->len ||
+      memcmp(token->str, op, token->len)) {
+    error_at(token->str, "\"%s\"ではありません", op);
   }
   token = token->next;
 }
@@ -75,14 +80,17 @@ int expect_number() {
 
 bool at_eof() { return token->kind == TK_EOF; }
 
+bool startswitch(char *p, char *q) { return memcmp(p, q, strlen(q)) == 0; }
+
 //新しいトークンを作成してcurに繋げる
-Token *new_token(TokenKind kind, Token *cur, char *str) {
+Token *new_token(TokenKind kind, Token *cur, char *str, int len) {
   // malloc関数で確保して、領域を0で初期化. calloc(count, size) count: 要素数.
   // size: 要素のサイズ
   Token *tok = (Token *)calloc(1, sizeof(Token));
   tok->kind = kind;
   tok->str = str;
   cur->next = tok;
+  tok->len = len;
 
   return tok;
 }
@@ -99,23 +107,33 @@ Token *tokenlize(char *input) {
       continue;
     }
 
-    if (string("+-*/()").find(*p) != std::string::npos) {
-      cur = new_token(TK_RESERVED, cur, p);
+    if (startswitch(p, "==") || startswitch(p, "!=") || startswitch(p, "<=") ||
+        startswitch(p, ">=")) {
+      // 2文字以上トークンが進むケース
+      cur = new_token(TK_RESERVED, cur, p, 2);
+      p += 2;
+      continue;
+    }
+
+    if (string("+-*/()<>").find(*p) != std::string::npos) {
+      cur = new_token(TK_RESERVED, cur, p, 1);
       p++;
       continue;
     }
 
     if (isdigit(*p)) {
-      cur = new_token(TK_NUM, cur, p);
+      cur = new_token(TK_NUM, cur, p, 0); //長さがわからないのでいったん0を代入
+      char *q = p;                        //現在のpのアドレスを保持
       // strtol(): 文字列を数値に変換する. 文字数に応じてpを進める
       cur->val = strtol(p, &p, 10);
+      cur->len = p - q; //アドレスを比較し、進んだ距離をlenに代入
       continue;
     }
 
     error_at(p, "トークナイズできません");
   }
 
-  new_token(TK_EOF, cur, p); // 1つ目のTokenは空のTokenなのでnextのものを返す
+  new_token(TK_EOF, cur, p, 0); // 1つ目のTokenは空のTokenなのでnextのものを返す
   return head.next;
 }
 
@@ -125,6 +143,10 @@ typedef enum {
   ND_MUL, // *
   ND_DIV, // /
   ND_NUM, // 整数
+  ND_EQ,  // ==
+  ND_NE,  // !=
+  ND_LT,  // <
+  ND_LE,  // <=
 } NodeKind;
 
 typedef struct Node node;
@@ -155,10 +177,10 @@ Node *expr();
 
 // primary = "(" expr ")" | num
 Node *primary() {
-  if (consume('(')) {
+  if (consume("(")) {
     //次のトークンが'('なら、'('expr')'となるはず
     Node *node = expr();
-    expect(')');
+    expect(")");
     return node;
   }
 
@@ -168,9 +190,9 @@ Node *primary() {
 
 // unary = ("+" | "-")? primary
 Node *unary() {
-  if (consume('+')) {
+  if (consume("+")) {
     return primary();
-  } else if (consume('-')) {
+  } else if (consume("-")) {
     // primaryに対して、0-primaryに置き換える
     return new_node(ND_SUB, new_node_num(0), primary());
   } else {
@@ -183,9 +205,9 @@ Node *mul() {
   Node *node = unary();
 
   for (;;) {
-    if (consume('*')) {
+    if (consume("*")) {
       node = new_node(ND_MUL, node, unary());
-    } else if (consume('/')) {
+    } else if (consume("/")) {
       node = new_node(ND_DIV, node, unary());
     } else {
       return node;
@@ -193,20 +215,57 @@ Node *mul() {
   }
 }
 
-// expr = mul ("+" mul | "-" mul)*
-Node *expr() {
+// add        = mul ("+" mul | "-" mul)*
+Node *add() {
   Node *node = mul();
 
   for (;;) {
-    if (consume('+')) {
+    if (consume("+")) {
       node = new_node(ND_ADD, node, mul());
-    } else if (consume('-')) {
+    } else if (consume("-")) {
       node = new_node(ND_SUB, node, mul());
     } else {
       return node;
     }
   }
 }
+
+// relational = add ("<" add | "<=" add | ">" add | ">=" add)*
+Node *relational() {
+  Node *node = add();
+
+  for (;;) {
+    if (consume("<=")) {
+      node = new_node(ND_LE, node, add());
+    } else if (consume("<")) {
+      node = new_node(ND_LT, node, add());
+    } else if (consume(">=")) {
+      node = new_node(ND_LE, add(), node);
+    } else if (consume(">")) {
+      node = new_node(ND_LT, add(), node);
+    } else {
+      return node;
+    }
+  }
+}
+
+// equality   = relational ("==" relational | "!=" relational)*
+Node *equality() {
+  Node *node = relational();
+
+  for (;;) {
+    if (consume("==")) {
+      node = new_node(ND_EQ, node, relational());
+    } else if (consume("!=")) {
+      node = new_node(ND_NE, node, relational());
+    } else {
+      return node;
+    }
+  }
+}
+
+// expr       = equality
+Node *expr() { return equality(); }
 
 void gen(Node *node) {
   if (node->kind == ND_NUM) {
@@ -238,6 +297,32 @@ void gen(Node *node) {
         << "  idiv rdi\n"; // dx, rax
                            // を合わせた値を第1オペランド(左の書き方だとrdi)のレジスタの
                            // 64bit 値で割る. 商を rax, 余りを rdxレジスタに格納
+    break;
+  case ND_EQ:
+    cout << "  cmp rax, rdi\n"; // rax と rdiを比較し、フラグレジスタにセット
+    cout
+        << "  sete al\n"; // cmp命令で調べた2つのレジスタが同じならraxの下位8bit(=al)に1をセット(それ以外なら0)
+    // setaは8ビットレジスタしか引数に取れないので、movzbで上位56ビットはゼロクリアした状態でraxにalをセットする
+    cout
+        << "  movzb rax, al\n"; // 上位56ビットはゼロクリアした状態でraxにalをセットする
+    break;
+  case ND_NE:
+    cout << "  cmp rax, rdi\n";
+    cout
+        << "  setne al\n"; // cmp命令で調べた2つのレジスタが違うならraxの下位8bit(=al)に1をセット(それ以外なら0)
+    cout << "  movzb rax, al\n";
+    break;
+  case ND_LT:
+    cout << "  cmp rax, rdi\n";
+    cout
+        << "  setl al\n"; // cmp命令で調べた2つのレジスタが<ならraxの下位8bit(=al)に1をセット(それ以外なら0)
+    cout << "  movzb rax, al\n";
+    break;
+  case ND_LE:
+    cout << "  cmp rax, rdi\n";
+    cout
+        << "  setle al\n"; // cmp命令で調べた2つのレジスタが<=ならraxの下位8bit(=al)に1をセット(それ以外なら0)
+    cout << "  movzb rax, al\n";
     break;
   }
 
