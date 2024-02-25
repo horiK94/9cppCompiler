@@ -84,10 +84,12 @@ Token *tokenlize(char *input) {
   Token head;
   head.next = NULL;
   Token *cur = &head;
+  cout << "開始" << endl;
 
   char *p = input;
   while (*p) {
     if (isspace(*p)) { //引数のint型が空白か？
+      cout << "空白" << '\n';
       p++;
       continue;
     }
@@ -95,18 +97,21 @@ Token *tokenlize(char *input) {
     if (startswitch(p, "==") || startswitch(p, "!=") || startswitch(p, "<=") ||
         startswitch(p, ">=")) {
       // 2文字以上トークンが進むケース
+      cout << "記号1" << endl;
       cur = new_token(TK_RESERVED, cur, p, 2);
       p += 2;
       continue;
     }
 
     if (string("+-*/()<>").find(*p) != std::string::npos) {
+      cout << "記号2" << endl;
       cur = new_token(TK_RESERVED, cur, p, 1);
       p++;
       continue;
     }
 
     if (isdigit(*p)) {
+      cout << "数字" << endl;
       cur = new_token(TK_NUM, cur, p, 0); //長さがわからないのでいったん0を代入
       char *q = p;                        //現在のpのアドレスを保持
       // strtol(): 文字列を数値に変換する. 文字数に応じてpを進める

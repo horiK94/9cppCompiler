@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 using namespace std;
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs) {
