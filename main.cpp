@@ -18,13 +18,11 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  cout << "p1" << '\n';
-
   user_input = argv[1];
   token = tokenlize(user_input);
   Node *node = expr();
 
-  cout << ".intel_syntax noprefix a\n";
+  cout << ".intel_syntax noprefix\n";
   cout << ".globl main\n";
   cout << "main:\n";
 

@@ -18,5 +18,4 @@ assert(){
 
 assert 10 "-10+20"
 
-
 echo OK
