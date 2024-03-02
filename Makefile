@@ -1,5 +1,3 @@
-all: main
-
 CXX = g++
 override CXXFLAGS += -g -Wno-everything -pthread -lm
 
