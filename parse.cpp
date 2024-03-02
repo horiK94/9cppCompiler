@@ -12,7 +12,7 @@ using namespace std;
 Token *token;     //現在着目しているトークン
 char *user_input; //入力
 
-void error_at(char *loc, char *fmt, ...) {
+void error_at(const char *loc, const char *fmt, ...) {
   va_list ap;        //可変長引数
   va_start(ap, fmt); //可変長引数の初期化. ap: 引数リスト,
                      // fmp:指定した引数以降を引数リストに格納
@@ -30,7 +30,7 @@ void error_at(char *loc, char *fmt, ...) {
 
 //次のトークンが期待している記号の時はトークンを読み進め、trueを返す
 //それ以外はfalseを返す
-bool consume(char *op) {
+bool consume(const char *op) {
   if (token->kind != TK_RESERVED || strlen(op) != token->len ||
       memcmp(token->str, op,
              token->len)) { // token->strとopをtoken->len文字だけ比較
@@ -43,7 +43,7 @@ bool consume(char *op) {
 
 //次のトークンが期待している記号の時はトークンを読み進める
 //それ以外はエラーを報告する
-void expect(char *op) {
+void expect(const char *op) {
   if (token->kind != TK_RESERVED || strlen(op) != token->len ||
       memcmp(token->str, op, token->len)) {
     error_at(token->str, "\"%s\"ではありません", op);
@@ -65,10 +65,12 @@ int expect_number() {
 
 bool at_eof() { return token->kind == TK_EOF; }
 
-bool startswitch(char *p, char *q) { return memcmp(p, q, strlen(q)) == 0; }
+bool startswitch(const char *p, const char *q) {
+  return memcmp(p, q, strlen(q)) == 0;
+}
 
 //新しいトークンを作成してcurに繋げる
-Token *new_token(TokenKind kind, Token *cur, char *str, int len) {
+Token *new_token(TokenKind kind, Token *cur, const char *str, int len) {
   // malloc関数で確保して、領域を0で初期化. calloc(count, size) count: 要素数.
   // size: 要素のサイズ
   Token *tok = (Token *)calloc(1, sizeof(Token));
@@ -80,12 +82,12 @@ Token *new_token(TokenKind kind, Token *cur, char *str, int len) {
   return tok;
 }
 
-Token *tokenlize(char *input) {
+Token *tokenlize(const char *input) {
   Token head;
   head.next = NULL;
   Token *cur = &head;
 
-  char *p = input;
+  const char *p = input;
   while (*p) {
     if (isspace(*p)) { //引数のint型が空白か？
       p++;
@@ -108,9 +110,11 @@ Token *tokenlize(char *input) {
 
     if (isdigit(*p)) {
       cur = new_token(TK_NUM, cur, p, 0); //長さがわからないのでいったん0を代入
-      char *q = p;                        //現在のpのアドレスを保持
+      const char *q = p;                  //現在のpのアドレスを保持
       // strtol(): 文字列を数値に変換する. 文字数に応じてpを進める
-      cur->val = strtol(p, &p, 10);
+      char *p2 = nullptr;
+      cur->val = strtol(p, &p2, 10);
+      p = p2;
       cur->len = p - q; //アドレスを比較し、進んだ距離をlenに代入
       continue;
     }

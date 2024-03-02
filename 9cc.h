@@ -4,13 +4,11 @@ typedef enum {
   TK_EOF,      //入力の終わりを表すトークン
 } TokenKind;
 
-typedef struct Token Token;
-
 struct Token {
   TokenKind kind; //トークンの型
   Token *next;    //次の入力トークン
   int val;        // kindがTK_NUMの場合、その数値
-  char *str;      // kindがTK_RESERVEDの場合、その文字列
+  const char *str;      // kindがTK_RESERVEDの場合、その文字列
   int len; //トークンの長さ(比較演算子は2文字以上もあり得るため)
 };
 
@@ -26,8 +24,6 @@ typedef enum {
   ND_LE,  // <=
 } NodeKind;
 
-typedef struct Node node;
-
 struct Node {
   NodeKind kind; //ノードの型
   Node *lhs;     //左辺
@@ -35,10 +31,10 @@ struct Node {
   int val;       // kindがND_NUMの時使用
 };
 
-bool consume(char *op);
+bool consume(const char *op);
 int expect_number();
-void expect(char *op);
-Token *tokenlize(char *input);
+void expect(const char *op);
+Token *tokenlize(const char *input);
 Node *expr();
 void gen(Node *node);
 

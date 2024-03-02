@@ -31,6 +31,6 @@ int main(int argc, char **argv) {
 
   //スタックトップに結果がpushされているので、raxにロード(=pop)する
   cout << "  pop rax\n";
-  cout << "  ret\n";
+  cout << "  ret\n ";
   return 0;
 }
