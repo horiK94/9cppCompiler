@@ -2,10 +2,11 @@ name: Test Runner
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: true
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
   # This workflow contains a single job called "build"
   build:
