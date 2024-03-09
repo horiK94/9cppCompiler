@@ -18,19 +18,36 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  //トークナイズしてパース
+  //結果はcodeに保存
   user_input = argv[1];
-  token = tokenlize(user_input);
-  Node *node = expr();
+  tokenlize();
+  program();
 
+  // アセンブリの前半部分を出力
   cout << ".intel_syntax noprefix\n";
   cout << ".globl main\n";
   cout << "main:\n";
 
-  //抽象構文木を下りながらコード生成
-  gen(node);
+  //プロローグ
+  //変数26個分の領域を確保
+  cout << "  push rbp\n";     // rbpのアドレスをpush
+  cout << "  mov rbp, rsp\n"; // rspに格納されている値をrbpにコピー
+  cout << "  sub rsp, 208\n"; // 26個分の領域確保
 
-  //スタックトップに結果がpushされているので、raxにロード(=pop)する
-  cout << "  pop rax\n";
+  // 先頭の式から順にコード生成
+  for (int i = 0; code[i]; i++) {
+    gen(code[i]);
+
+    // 式の評価結果としてスタックに一つの値が残っている
+    // はずなので、スタックが溢れないようにポップしておく
+    cout << "  pop rax\n";
+  }
+
+  //最後の式の結果がraxに残っているので返り値にする
+  cout << "  mov rsp, rbp\n";
+  // rbpに結果がpushされているので、rspにロード(=pop)する
+  cout << "  pop rbp\n";
   cout << "  ret\n ";
   return 0;
 }

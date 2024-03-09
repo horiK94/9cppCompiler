@@ -41,6 +41,16 @@ bool consume(const char *op) {
   return true;
 }
 
+Token *consume_ident() {
+  if (token->kind != TK_IDENT) {
+    return nullptr;
+  }
+
+  Token *ident = token;
+  token = token->next;
+  return ident;
+}
+
 //次のトークンが期待している記号の時はトークンを読み進める
 //それ以外はエラーを報告する
 void expect(const char *op) {
@@ -82,12 +92,12 @@ Token *new_token(TokenKind kind, Token *cur, const char *str, int len) {
   return tok;
 }
 
-Token *tokenlize(const char *input) {
+void tokenlize() {
   Token head;
   head.next = NULL;
   Token *cur = &head;
 
-  const char *p = input;
+  const char *p = user_input;
   while (*p) {
     if (isspace(*p)) { //引数のint型が空白か？
       p++;
@@ -102,8 +112,14 @@ Token *tokenlize(const char *input) {
       continue;
     }
 
-    if (string("+-*/()<>").find(*p) != std::string::npos) {
+    if (string("+-*/()<>;=").find(*p) != std::string::npos) {
       cur = new_token(TK_RESERVED, cur, p, 1);
+      p++;
+      continue;
+    }
+
+    if ('a' <= *p && *p <= 'z') {
+      cur = new_token(TK_IDENT, cur, p, 1);
       p++;
       continue;
     }
@@ -123,5 +139,5 @@ Token *tokenlize(const char *input) {
   }
 
   new_token(TK_EOF, cur, p, 0); // 1つ目のTokenは空のTokenなのでnextのものを返す
-  return head.next;
+  token = head.next;
 }

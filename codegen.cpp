@@ -25,7 +25,8 @@ Node *new_node_num(int val) {
 
 Node *expr();
 
-// primary = "(" expr ")" | num
+//値、変数、カッコで囲まれたステートを検知. 例) 2, a, (a + 4 == 2 * 3) != 0
+// primary    = num | ident | "(" expr ")"
 Node *primary() {
   if (consume("(")) {
     //次のトークンが'('なら、'('expr')'となるはず
@@ -34,11 +35,22 @@ Node *primary() {
     return node;
   }
 
+  Token *tok = consume_ident();
+  if (tok) {
+    Node *node = (Node *)calloc(1, sizeof(Node));
+    node->kind = ND_LVAR;
+    // offset:
+    // 与えられた文字の'a'の前のローカル変数のベースポインタ(=関数呼び出し時点のRBP)からのオフセット
+    node->offset = (tok->str[0] - 'a' + 1) * 8;
+    return node;
+  }
+
   //()が無ければ数字があるはず
   return new_node_num(expect_number());
 }
 
-// unary = ("+" | "-")? primary
+//プラス、マイナスを検知. 例) +a, -3
+// unary      = ("+" | "-")? primary
 Node *unary() {
   if (consume("+")) {
     return primary();
@@ -50,7 +62,8 @@ Node *unary() {
   }
 }
 
-// mul = unary ("*" unary | "/" unary)*
+//積、商を検知. 例) 4 / 2, a * 3
+// mul        = unary ("*" unary | "/" unary)*
 Node *mul() {
   Node *node = unary();
 
@@ -65,6 +78,7 @@ Node *mul() {
   }
 }
 
+//和や差を検知. 例) 2 + 4, a - 4
 // add        = mul ("+" mul | "-" mul)*
 Node *add() {
   Node *node = mul();
@@ -80,6 +94,7 @@ Node *add() {
   }
 }
 
+// 大小関係を検知. 例) 1 < a + 3, 3 >= 4, 1 <= 2 > 0
 // relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 Node *relational() {
   Node *node = add();
@@ -99,6 +114,7 @@ Node *relational() {
   }
 }
 
+//等号、不等号の検知. 2 == 1 + 4 や a != 5 > 2 == 0 といったものを検知
 // equality   = relational ("==" relational | "!=" relational)*
 Node *equality() {
   Node *node = relational();
@@ -114,12 +130,77 @@ Node *equality() {
   }
 }
 
-// expr       = equality
-Node *expr() { return equality(); }
+//代入式か？ h = 2 や a = b = 0 == 1を検知する
+// assign     = equality ("=" assign)?
+Node *assign() {
+  Node *node = equality();
+
+  if (consume("=")) {
+    node = new_node(ND_ASSIGN, node, assign());
+  }
+  return node;
+}
+
+// expr       = assign
+Node *expr() { return assign(); }
+
+//文の終端を検知する
+// stmt       = expr ";"
+Node *stmt() {
+  Node *node = expr();
+  expect(";");
+  return node;
+}
+
+Node *code[100];
+
+//複数行書けるように. h = 2; t = 3;
+// program    = stmt*
+void program() {
+  int i = 0;
+  while (!at_eof()) {
+    code[i++] = stmt();
+  }
+  code[i] = nullptr;
+}
+
+void gen_lval(Node *node) {
+  if (node->kind != ND_LVAR) {
+    error_at((char *)node->kind, "代入の左辺値が変数ではありません");
+  }
+
+  // rbpの値（=関数呼び出し時点のRBP)をraxにコピー
+  cout << "  mov rax, rbp\n";
+  // node->offsetだけraxのアドレスを戻す
+  cout << "  sub rax, " << node->offset << "\n";
+  // rspを8バイト減らして、raxの内容(=変数の内容)を書き込む
+  cout << "  push rax\n";
+}
 
 void gen(Node *node) {
-  if (node->kind == ND_NUM) {
-    cout << "  push " << node->val << '\n';
+  switch (node->kind) {
+  case ND_NUM: //数字
+    cout << "  push " << node->val << "\n";
+    return;
+  case ND_LVAR: //変数
+
+    gen_lval(node);
+    // gen_lval()で"push rax"をする前に戻る
+    cout << "  pop rax\n";
+
+    cout << "  mov rax, [rax]\n";
+    cout << "  push rax\n";
+    return;
+  case ND_ASSIGN: //=
+    // raxは変数のアドレス、rspはraxの値が書き込まれたアドレス(≠raxのアドレス)
+    gen_lval(node->lhs);
+    gen(node->rhs);
+    // rdiには右辺の値が書き込まれる
+    cout << "  pop rdi\n";
+    // raxには元のraxの値が入る(つまり変わらない)
+    cout << "  pop rax\n";
+    cout << "  mov [rax], rdi\n";
+    cout << "  push rdi\n";
     return;
   }
 
