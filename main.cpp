@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
   //変数26個分の領域を確保
   cout << "  push rbp\n";     // rbpのアドレスをpush
   cout << "  mov rbp, rsp\n"; // rspに格納されている値をrbpにコピー
-  cout << "  sub rsp, 208\n"; // 26個分の領域確保
+  cout << "  sub rsp, 800\n"; // 100個分の領域確保
 
   // 先頭の式から順にコード生成
   for (int i = 0; code[i]; i++) {

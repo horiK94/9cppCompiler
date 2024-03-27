@@ -47,7 +47,7 @@ assert 1 '1>=1;'
 assert 0 '1>=2;'
 
 assert 1 '2+3>4==-1<2-2;'
-# assert 5 'a=2; a+3;'
-assert 23 'b=a=(1+5)*2; g=1; i=0<1; a+b*i-g;'
+assert 5 'abc=2; abc+3;'
+assert 35 'hoge=foo=(1+5)*2; bar=2; isTrue=0<1; hoge+foo*bar-isTrue;'
 
 echo OK
