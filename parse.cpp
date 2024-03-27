@@ -92,6 +92,16 @@ Token *new_token(TokenKind kind, Token *cur, const char *str, int len) {
   return tok;
 }
 
+LVar *find_lvar(Token *tok) {
+  for (LVar *var = locals; var; var = var->next) {
+    if (var->len == tok->len && !memcmp(tok->str, var->name, var->len)) {
+      // memcmp() 関数は、buf1 と buf2 の先頭 count バイトを比較します。
+      return var;
+    }
+  }
+  return nullptr;
+}
+
 void tokenlize() {
   Token head;
   head.next = NULL;
@@ -118,9 +128,15 @@ void tokenlize() {
       continue;
     }
 
-    if ('a' <= *p && *p <= 'z') {
-      cur = new_token(TK_IDENT, cur, p, 1);
-      p++;
+    if (isalpha(*p)) {
+      cur = new_token(TK_IDENT, cur, p, 0);
+
+      int len = 0;
+      while (isalpha(*p)) {
+        p++;
+        len++;
+      }
+      cur->len = len;
       continue;
     }
 

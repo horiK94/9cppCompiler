@@ -24,6 +24,7 @@ Node *new_node_num(int val) {
 }
 
 Node *expr();
+LVar *locals; //この変数を辿ることで既知かを判定
 
 //値、変数、カッコで囲まれたステートを検知. 例) 2, a, (a + 4 == 2 * 3) != 0
 // primary    = num | ident | "(" expr ")"
@@ -39,9 +40,27 @@ Node *primary() {
   if (tok) {
     Node *node = (Node *)calloc(1, sizeof(Node));
     node->kind = ND_LVAR;
+
+    LVar *lvar = find_lvar(tok);
+    if (lvar) {
+      //変数がある
+      node->offset = lvar->offset;
+    } else {
+      //未知の変数
+      lvar = (LVar *)calloc(1, sizeof(LVar)); //記憶域を割り当て
+      lvar->next = locals;
+      lvar->name = tok->str;
+      lvar->len = tok->len;
+      if (locals == nullptr) {
+        lvar->offset = 8;
+      } else {
+        lvar->offset = locals->offset + 8;
+      }
+      node->offset = lvar->offset;
+      locals = lvar;
+    }
     // offset:
     // 与えられた文字の'a'の前のローカル変数のベースポインタ(=関数呼び出し時点のRBP)からのオフセット
-    node->offset = (tok->str[0] - 'a' + 1) * 8;
     return node;
   }
 
