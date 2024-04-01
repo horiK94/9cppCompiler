@@ -15,7 +15,7 @@ char *user_input; //入力
 void error_at(const char *loc, const char *fmt, ...) {
   va_list ap;        //可変長引数
   va_start(ap, fmt); //可変長引数の初期化. ap: 引数リスト,
-                     // fmp:指定した引数以降を引数リストに格納
+  // fmp:指定した引数以降を引数リストに格納
 
   int pos = loc - user_input;
   fprintf(stderr, "%s\n", user_input);
@@ -31,7 +31,8 @@ void error_at(const char *loc, const char *fmt, ...) {
 //次のトークンが期待している記号の時はトークンを読み進め、trueを返す
 //それ以外はfalseを返す
 bool consume(const char *op) {
-  if (token->kind != TK_RESERVED || strlen(op) != token->len ||
+  if ((token->kind != TK_RESERVED && token->kind != TK_RETURN) ||
+      strlen(op) != token->len ||
       memcmp(token->str, op,
              token->len)) { // token->strとopをtoken->len文字だけ比較
     return false;
@@ -84,10 +85,12 @@ Token *new_token(TokenKind kind, Token *cur, const char *str, int len) {
   // malloc関数で確保して、領域を0で初期化. calloc(count, size) count: 要素数.
   // size: 要素のサイズ
   Token *tok = (Token *)calloc(1, sizeof(Token));
-  tok->kind = kind;
-  tok->str = str;
-  cur->next = tok;
-  tok->len = len;
+  if (tok != nullptr) {
+    tok->kind = kind;
+    tok->str = str;
+    cur->next = tok;
+    tok->len = len;
+  }
 
   return tok;
 }
@@ -100,6 +103,11 @@ LVar *find_lvar(Token *tok) {
     }
   }
   return nullptr;
+}
+
+int isAlnum(char c) {
+  return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
+         ('0' <= c && c <= '9') || c == '_';
 }
 
 void tokenlize() {
@@ -128,7 +136,16 @@ void tokenlize() {
       continue;
     }
 
-    if (isalpha(*p)) {
+    if (strncmp(p, "return", 6) == 0 &&
+        !isAlnum(
+            p[6])) // returnの後ろがアルファベットや数字ではないかつ、"return"という文字列の時
+    {
+      cur = new_token(TK_RETURN, cur, p, 6);
+      p += 6;
+      continue;
+    }
+
+    if ('a' <= *p && *p <= 'z') {
       cur = new_token(TK_IDENT, cur, p, 0);
 
       int len = 0;

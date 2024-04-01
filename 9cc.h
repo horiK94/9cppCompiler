@@ -3,6 +3,7 @@ typedef enum {
   TK_IDENT,    //識別子
   TK_NUM,      //整数トークン
   TK_EOF,      //入力の終わりを表すトークン
+  TK_RETURN,   // returnトークン
 } TokenKind;
 
 struct Token {
@@ -25,6 +26,7 @@ typedef enum {
   ND_LE,     // <=
   ND_ASSIGN, //=
   ND_LVAR,   //ローカル変数
+  ND_RETURN, // return文
 } NodeKind;
 
 struct Node {
@@ -43,7 +45,7 @@ struct LVar {
   int offset;       // RBPからのオフセット
 };
 
-extern LVar *locals;    //この変数を辿ることで既知かを判定
+extern LVar *locals; //この変数を辿ることで既知かを判定
 
 bool consume(const char *op);
 Token *consume_ident();
@@ -59,4 +61,3 @@ LVar *find_lvar(Token *tok);
 extern Token *token;     //現在着目しているトークン
 extern char *user_input; //入力
 extern Node *code[100];
-

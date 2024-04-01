@@ -164,10 +164,23 @@ Node *assign() {
 Node *expr() { return assign(); }
 
 //文の終端を検知する
-// stmt       = expr ";"
+// stmt       = expr ";" | "return" expr ";"
 Node *stmt() {
-  Node *node = expr();
-  expect(";");
+  Node *node;
+
+  if (consume("return")) {
+    // Nodeの領域を1つ確保
+    node = (Node *)calloc(1, sizeof(Node));
+    node->kind = ND_RETURN;
+    node->lhs = expr(); // Node*なのでlhsに入れる
+  } else {
+    node = expr();
+  }
+
+  if (!consume(";")) //;でなければfalseが返ってくる. ;ならトークンを読み進める
+  {
+    error_at(token->str, "';'ではないトークンです");
+  }
   return node;
 }
 
@@ -183,43 +196,57 @@ void program() {
   code[i] = nullptr;
 }
 
+//与えられたノードが変数を指しているときに、
+//その変数のアドレスを計算して、それをスタックにプッシュ
 void gen_lval(Node *node) {
   if (node->kind != ND_LVAR) {
     error_at((char *)node->kind, "代入の左辺値が変数ではありません");
   }
 
   // rbpの値（=関数呼び出し時点のRBP)をraxにコピー
-  cout << "  mov rax, rbp\n";
+  std::cout << "  mov rax, rbp\n";
   // node->offsetだけraxのアドレスを戻す
-  cout << "  sub rax, " << node->offset << "\n";
+  std::cout << "  sub rax, " << node->offset << "\n";
   // rspを8バイト減らして、raxの内容(=変数の内容)を書き込む
-  cout << "  push rax\n";
+  std::cout << "  push rax\n";
 }
 
 void gen(Node *node) {
   switch (node->kind) {
   case ND_NUM: //数字
-    cout << "  push " << node->val << "\n";
+    std::cout << "  push " << node->val << "\n";
     return;
   case ND_LVAR: //変数
-
     gen_lval(node);
     // gen_lval()で"push rax"をする前に戻る
-    cout << "  pop rax\n";
+    std::cout << "  pop rax\n";
 
-    cout << "  mov rax, [rax]\n";
-    cout << "  push rax\n";
+    std::cout << "  mov rax, [rax]\n";
+    std::cout << "  push rax\n";
     return;
   case ND_ASSIGN: //=
     // raxは変数のアドレス、rspはraxの値が書き込まれたアドレス(≠raxのアドレス)
     gen_lval(node->lhs);
     gen(node->rhs);
     // rdiには右辺の値が書き込まれる
-    cout << "  pop rdi\n";
+    std::cout << "  pop rdi\n";
     // raxには元のraxの値が入る(つまり変わらない)
+    std::cout << "  pop rax\n";
+    std::cout << "  mov [rax], rdi\n";
+    std::cout << "  push rdi\n";
+    return;
+  case ND_RETURN: //リターン文
+    gen(node->lhs);
+    //式の評価結果としてスタックに一つの値が残っているのでpopする
+    //最後の式の結果はraxに入れる
     cout << "  pop rax\n";
-    cout << "  mov [rax], rdi\n";
-    cout << "  push rdi\n";
+    // rbpは関数の呼び出し時点のBPR値が代入されたアドレスを指している.
+    // rspも同じアドレスを代入する
+    cout << "  mov rsp, rbp\n";
+    // rbpにrspがいるアドレスの中の値(=関数呼び出し時点のBRPの値)を書き込む =
+    // 関数呼び出し時点の配置になる
+    cout << "  pop rbp\n";
+    cout << "  ret\n";
     return;
   }
 
@@ -227,54 +254,55 @@ void gen(Node *node) {
   gen(node->lhs);
   gen(node->rhs);
 
-  cout << "  pop rdi\n"; //右辺(node->rhs)をrdiにpop
-  cout << "  pop rax\n"; //左辺(node->lhs)をraxにpop
+  std::cout << "  pop rdi\n"; //右辺(node->rhs)をrdiにpop
+  std::cout << "  pop rax\n"; //左辺(node->lhs)をraxにpop
 
   switch (node->kind) {
   case ND_ADD:
-    cout << "  add rax, rdi\n";
+    std::cout << "  add rax, rdi\n";
     break;
   case ND_SUB:
-    cout << "  sub rax, rdi\n";
+    std::cout << "  sub rax, rdi\n";
     break;
   case ND_MUL:
-    cout << "  imul rax, rdi\n";
+    std::cout << "  imul rax, rdi\n";
     break;
   case ND_DIV:
-    cout << "  cqo\n"; // rax の値を 128bit integer に拡張し, rax, rdx(符号拡張)
-                       // レジスタへ格納
-    cout
-        << "  idiv rdi\n"; // dx, rax
-                           // を合わせた値を第1オペランド(左の書き方だとrdi)のレジスタの
-                           // 64bit 値で割る. 商を rax, 余りを rdxレジスタに格納
+    std::cout
+        << "  cqo\n"; // rax の値を 128bit integer に拡張し, rax, rdx(符号拡張)
+    // レジスタへ格納
+    std::cout << "  idiv rdi\n"; // dx, rax
+    // を合わせた値を第1オペランド(左の書き方だとrdi)のレジスタの
+    // 64bit 値で割る. 商を rax, 余りを rdxレジスタに格納
     break;
   case ND_EQ:
-    cout << "  cmp rax, rdi\n"; // rax と rdiを比較し、フラグレジスタにセット
-    cout
+    std::cout
+        << "  cmp rax, rdi\n"; // rax と rdiを比較し、フラグレジスタにセット
+    std::cout
         << "  sete al\n"; // cmp命令で調べた2つのレジスタが同じならraxの下位8bit(=al)に1をセット(それ以外なら0)
     // setaは8ビットレジスタしか引数に取れないので、movzbで上位56ビットはゼロクリアした状態でraxにalをセットする
-    cout
+    std::cout
         << "  movzb rax, al\n"; // 上位56ビットはゼロクリアした状態でraxにalをセットする
     break;
   case ND_NE:
-    cout << "  cmp rax, rdi\n";
-    cout
+    std::cout << "  cmp rax, rdi\n";
+    std::cout
         << "  setne al\n"; // cmp命令で調べた2つのレジスタが違うならraxの下位8bit(=al)に1をセット(それ以外なら0)
-    cout << "  movzb rax, al\n";
+    std::cout << "  movzb rax, al\n";
     break;
   case ND_LT:
-    cout << "  cmp rax, rdi\n";
-    cout
+    std::cout << "  cmp rax, rdi\n";
+    std::cout
         << "  setl al\n"; // cmp命令で調べた2つのレジスタが<ならraxの下位8bit(=al)に1をセット(それ以外なら0)
-    cout << "  movzb rax, al\n";
+    std::cout << "  movzb rax, al\n";
     break;
   case ND_LE:
-    cout << "  cmp rax, rdi\n";
-    cout
+    std::cout << "  cmp rax, rdi\n";
+    std::cout
         << "  setle al\n"; // cmp命令で調べた2つのレジスタが<=ならraxの下位8bit(=al)に1をセット(それ以外なら0)
-    cout << "  movzb rax, al\n";
+    std::cout << "  movzb rax, al\n";
     break;
   }
 
-  cout << "  push rax\n"; //結果(=rax)をpushする
+  std::cout << "  push rax\n"; //結果(=rax)をpushする
 }
