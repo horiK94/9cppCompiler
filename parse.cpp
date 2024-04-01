@@ -145,7 +145,7 @@ void tokenlize() {
       continue;
     }
 
-    if ('a' <= *p && *p <= 'z') {
+    if (isalpha(*p)) {
       cur = new_token(TK_IDENT, cur, p, 0);
 
       int len = 0;

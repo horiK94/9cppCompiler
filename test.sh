@@ -49,6 +49,7 @@ assert 0 '1>=2;'
 assert 1 '2+3>4==-1<2-2;'
 assert 5 'abc=2; abc+3;'
 assert 35 'hoge=foo=(1+5)*2; bar=2; isTrue=0<1; hoge+foo*bar-isTrue;'
+assert 123 "hoge = 1; HOGE = 2; hoGe = 3; hoge * 100 + HOGE*10 + hoGe;"
 
 assert 14 "a = 3; b = 5 * 6 - 8; return a + b / 2;"
 assert 1 "return 1; return 4;"
